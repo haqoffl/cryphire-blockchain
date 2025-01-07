@@ -14,9 +14,8 @@ module.exports = {
   networks: {
     hardhat: {
       forking: {
-        url: process.env.MAINNETURL_ALCHEMY , // Your Alchemy URL
+        url: "" , // Your Alchemy URL
       },
-      gasPrice: "auto", // Automatically sets gas price for transactions
     },
     localhost: {
       url: "http://127.0.0.1:8545", // Local Hardhat node for testing

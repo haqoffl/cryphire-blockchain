@@ -3,14 +3,14 @@ var {ethers} = require('hardhat')
 const helpers= require('@nomicfoundation/hardhat-toolbox/network-helpers')
 const tokenABI = require('../tokenABI.json')
 const {before} = require('mocha')
-let investor = "0x69166e49d2fd23E4cbEA767d7191bE423a7733A5"
+let investor = "0xF977814e90dA44bFA03b6295A0616a897441aceC"
 const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7" //USDT
 const DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F" //DAI
 const UNI = "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984" //UNISWAP 
 describe('Cryphire', async()=> {
 let cryphire
   before(async () => {
-    await helpers.reset("https://eth-mainnet.g.alchemy.com/v2/EDVesxXnpj6wZoq8trrtFnNy6kBa9_fP");
+    await helpers.reset("https://eth-mainnet.g.alchemy.com/v2/RD7nbqVS_IPopOiBoSeB7G12jCILnzNH");
     [trader] = await ethers.getSigners()
     let swap_router = "0xE592427A0AEce92De3Edee1F18E0157C05861564"
     let _nonFungiblePositionManager = "0xC36442b4a4522E871399CD717aBDD847Ab11FE88"
@@ -20,8 +20,9 @@ let cryphire
   })
 
 
-    it("transfer token", async () => {
-        let [trader] = await ethers.getSigners()
+    it("transfer token/distributing tokens to other accounts", async () => {
+       try{
+        let [trader,account2,account3,account4,account5] = await ethers.getSigners()
         await hre.network.provider.send("hardhat_impersonateAccount", [investor]);
         //await helpers.impersonateAccount(investor)
         const impersonatedSigner = await ethers.getSigner(investor)
@@ -30,12 +31,14 @@ let cryphire
         const baseFeePerGas = block.baseFeePerGas;
         console.log("Base Fee Per Gas:", baseFeePerGas.toString());
          const maxFeePerGas = ethers.toNumber(baseFeePerGas) * 2; // 2x base fee to ensure the transaction gets mined  
-         let amount = ethers.parseUnits('100000', 6);      
-        let dt = await tokenContract.transfer(trader.address, amount,{
-            maxFeePerGas: maxFeePerGas,
-        }) 
-        const receipt = await dt.wait();
-        console.log(receipt)
+         let amount = ethers.parseUnits('1000', 6);      
+      for(let acc of [trader,account2,account3,account4,account5]){
+        let dt = await tokenContract.transfer(acc.address,ethers.toNumber(amount),{from:investor,maxFeePerGas:maxFeePerGas})
+        console.log(dt)
+      }
+       }catch(e){
+        console.log(e)
+       }
 
     })
 
@@ -70,6 +73,30 @@ let cryphire
          let balance = await cryphire.investor_investment(investor)
          console.log("investor investment: ",ethers.toNumber(balance))
  
+     })
+
+     it("approve & invest by other account", async () => {
+ try{
+  let [trader,account2,account3,account4,account5] = await ethers.getSigners()
+
+  for(let acc of [account2,account3,account4,account5]){
+    const tokenContract = new ethers.Contract(tokenAddress,tokenABI,acc);
+    let amount = ethers.parseUnits('200', 6);
+    let approve = await tokenContract.approve(cryphire.target,amount) 
+    console.log(approve)
+    let allowance = await tokenContract.allowance(acc.address,cryphire.target)
+    console.log("allowance:",allowance)
+    let amount_to_invest = ethers.parseUnits('100', 6); 
+    let dt = await cryphire.connect(acc).depositERC20_inv(ethers.toNumber(amount_to_invest)); 
+    // console.log(dt)
+    let balance = await cryphire.investor_investment(acc.address)
+    console.log("investor investment: ",ethers.toNumber(balance))
+  }
+
+ }catch(e){
+  console.log(e)
+ }
+
      })
 
      it("swapForExactInputSingle", async () => {
@@ -126,6 +153,14 @@ let cryphire
         console.log(dt)
      })
 
+
+     it("balance of USDT & DAI in contract after mint liquidity", async () => {
+      let [trader] = await ethers.getSigners()
+      let dt = await cryphire.connect(trader).balance_of_tokens(DAI)
+      let usdtBal = await cryphire.connect(trader).balance_of_tokens(tokenAddress)
+      console.log("balance of DAI:",dt)
+      console.log("balance of USDT:",usdtBal)
+   })
      it("collecting pool fee",async()=>{
         let [trader] = await ethers.getSigners()
         let idTrackingIndex = await cryphire.idTrackingIndex()
@@ -152,6 +187,14 @@ let cryphire
         console.log(dt)
      })
 
+     it("balance of USDT & DAI in contract after increase liquidity", async () => {
+      let [trader] = await ethers.getSigners()
+      let dt = await cryphire.connect(trader).balance_of_tokens(DAI)
+      let usdtBal = await cryphire.connect(trader).balance_of_tokens(tokenAddress)
+      console.log("balance of DAI:",dt)
+      console.log("balance of USDT:",usdtBal)
+   })
+
      it("getLiquidity",async()=>{
         let [trader] = await ethers.getSigners()
         let idTrackingIndex = await cryphire.idTrackingIndex()
@@ -176,6 +219,7 @@ let cryphire
         console.log(dt)
      })
 
+
      it("getLiquidity after decrease",async()=>{
       let [trader] = await ethers.getSigners()
       let idTrackingIndex = await cryphire.idTrackingIndex()
@@ -187,5 +231,44 @@ let cryphire
       let dt = await cryphire.connect(trader).getLiquidity(tokenId)
       console.log(dt)
    })
+
+ it("collecting pool fee",async()=>{
+  let [trader] = await ethers.getSigners()
+  let idTrackingIndex = await cryphire.idTrackingIndex()
+let trackingIndex = ethers.toNumber(idTrackingIndex)-1
+  let idTrackingIndexToTokenId = await cryphire.idTrackingIndexToTokenId(trackingIndex)
+
+  let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
+  console.log("tokenId:",tokenId)
+  let dt = await cryphire.connect(trader).collectAllFees(tokenId)
+  console.log(dt)
+})
+
+ it("balance of USDT & DAI in contract after decrease liquidity", async () => {
+  let [trader] = await ethers.getSigners()
+  let dt = await cryphire.connect(trader).balance_of_tokens(DAI)
+  let usdtBal = await cryphire.connect(trader).balance_of_tokens(tokenAddress)
+  console.log("balance of DAI:",dt)
+  console.log("balance of USDT:",usdtBal)
+})
+
+it("balance of  DAI for account2 before claim profit", async () => {
+  let [trader,account2] = await ethers.getSigners()
+  let contract = new ethers.Contract(DAI,tokenABI,account2);
+  let dt = await contract.balanceOf(account2.address)
+  console.log("balance of DAI:",dt)
+})
+it("claim my profit",async()=>{
+  let [trader,account2] = await ethers.getSigners()
+  let dt = await cryphire.connect(account2).claimProfit(DAI)
+  console.log(dt)
+})
+
+it("balance of account2 in contract after claim profit", async () => {
+  let [trader,account2] = await ethers.getSigners()
+  let contract = new ethers.Contract(DAI,tokenABI,account2);
+  let dt = await contract.balanceOf(account2.address)
+  console.log("balance of DAI:",dt)
+})
 })
 

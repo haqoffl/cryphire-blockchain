@@ -33,6 +33,7 @@ contract Cryphire is IERC721Receiver {
     uint public idTrackingIndex;
     mapping(uint256 => uint256) public idTrackingIndexToTokenId;
    address public immutable acceptingToken;
+   uint public decimal;
     ISwapRouter public immutable swapRouter;
     INonfungiblePositionManager public immutable nonfungiblePositionManager;
 constructor(uint _durationInDaysForRaising,uint _durationInDaysForPool,uint _trader_share,address _accepting_token,address _swapRouter, address _nonFungiblePositionManager) payable{
@@ -41,6 +42,7 @@ constructor(uint _durationInDaysForRaising,uint _durationInDaysForPool,uint _tra
         raising_deadline = block.timestamp + (_durationInDaysForRaising * 1 days);
         trader_share=_trader_share;
         acceptingToken = _accepting_token;
+        decimal = IERC20(_accepting_token).decimals();
         swapRouter = ISwapRouter(_swapRouter);
         nonfungiblePositionManager = INonfungiblePositionManager(_nonFungiblePositionManager);
         }
@@ -206,7 +208,7 @@ function collectAllFees(uint256 tokenId) external onlyTrader returns (uint256 am
             (amount0, amount1) = nonfungiblePositionManager.collect(params);
             console.log("Collected fees. Amount0:", amount0);
             console.log("Collected fees. Amount1:", amount1);
-         _sendToOwner(tokenId, amount0, amount1);
+        // _sendToOwner(tokenId, amount0, amount1);
 
         return (amount0, amount1);
 }
@@ -239,7 +241,7 @@ function increaseLiquidityCurrentRange(uint256 tokenId,uint256 amountAdd0,uint25
 function decreaseLiquidityInHalf(uint256 tokenId) external onlyTrader returns (uint256 amount0, uint256 amount1) {
         require(trader == msg.sender, 'Not the Trader');
         uint128 liquidity = deposits[tokenId].liquidity;
-        uint128 halfLiquidity = liquidity / 2;
+        uint128 halfLiquidity = (liquidity*75) / 100;
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: tokenId,
@@ -249,9 +251,23 @@ function decreaseLiquidityInHalf(uint256 tokenId) external onlyTrader returns (u
                 deadline: block.timestamp
             });
 
+        //before decrease liquidity,contract balance
+        uint256 contractBalance0 = IERC20(deposits[tokenId].token0).balanceOf(address(this));
+        uint256 contractBalance1 = IERC20(deposits[tokenId].token1).balanceOf(address(this));
+        console.log("contractBalance0:",contractBalance0);
+        console.log("contractBalance1:",contractBalance1);
+
+
         (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
 
-        _sendToOwner(tokenId, amount0, amount1);
+        //after decrease liquidity,contract balance
+        contractBalance0 = IERC20(deposits[tokenId].token0).balanceOf(address(this));
+        contractBalance1 = IERC20(deposits[tokenId].token1).balanceOf(address(this));
+        console.log("A-contractBalance0:",contractBalance0);
+        console.log("A-contractBalance1:",contractBalance1);
+        console.log("amount0:",amount0);
+        console.log("amount1:",amount1);
+     // _sendToOwner(tokenId, amount0, amount1);
 
         return (amount0, amount1);
 }
@@ -278,8 +294,13 @@ function _sendToOwner(uint256 tokenId,uint256 amount0,uint256 amount1) internal 
         address owner = deposits[tokenId].owner;
         address token0 = deposits[tokenId].token0;
         address token1 = deposits[tokenId].token1;
+        console.log("owner: ",owner);
+        console.log("token0: ",token0);
+        console.log("token1: ",token1);
+        console.log("contract:",address(this));
         TransferHelper.safeTransfer(token0, owner, amount0);
         TransferHelper.safeTransfer(token1, owner, amount1);
+        console.log("sent to owner"); 
 }
 
 function retrieveNFT(uint256 tokenId) onlyTrader external {
@@ -288,8 +309,29 @@ function retrieveNFT(uint256 tokenId) onlyTrader external {
         delete deposits[tokenId];
 }
 
+
 function balance_of_tokens(address _token) public view returns (uint256) {
         return IERC20(_token).balanceOf(address(this));
+}
+
+// percentageShare = investor_investment[user] * (10 ** decimal) / raised_amount
+function percentageShare(address user)public view returns(uint){
+    uint share = investor_investment[user] * (10 ** decimal) / raised_amount;
+    return share;
+}
+
+//tokenToTransfer = userContribution * tokenBalanceInContract / (10 ** tokenDecimal)
+function tokenToTransfer(address token,address user) public view returns (uint) { 
+    uint tokenDecimal = IERC20(token).decimals();
+    uint tokenBalanceInContract = IERC20(token).balanceOf(address(this));
+    uint tokenAmount = percentageShare(user) * tokenBalanceInContract / (10 ** tokenDecimal);
+    return tokenAmount;
+}
+function claimProfit(address token) public {
+//require(pool_deadline > block.timestamp,"you can't claim now");
+//require(raising_deadline > block.timestamp,"you can't claim now");
+uint tokenAmount = tokenToTransfer(token,msg.sender);
+IERC20(token).transfer(msg.sender,tokenAmount);
 }
 
 
@@ -310,3 +352,5 @@ function balance_of_tokens(address _token) public view returns (uint256) {
 // }
 
 //ganache-cli --fork.network mainnet --unlock 0x69166e49d2fd23E4cbEA767d7191bE423a7733A5
+
+
