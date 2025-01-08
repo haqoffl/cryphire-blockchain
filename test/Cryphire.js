@@ -203,11 +203,11 @@ let cryphire
   
         let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
         console.log("tokenId:",tokenId)
-        let dt = await cryphire.connect(trader).getLiquidity(tokenId)
+        let dt = await cryphire.connect(trader).getLiquidityPosition(tokenId)
         console.log(dt)
      })
 
-     it("decreaseLiquidityInHalf",async()=>{
+     it("decreaseLiquidity",async()=>{
         let [trader] = await ethers.getSigners()
         let idTrackingIndex = await cryphire.idTrackingIndex()
       let trackingIndex = ethers.toNumber(idTrackingIndex)-1
@@ -215,7 +215,7 @@ let cryphire
   
         let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
         console.log("tokenId:",tokenId)
-        let dt = await cryphire.connect(trader).decreaseLiquidityInHalf(tokenId)
+        let dt = await cryphire.connect(trader).decreaseLiquidity(tokenId,100)
         console.log(dt)
      })
 
@@ -228,7 +228,7 @@ let cryphire
 
       let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
       console.log("tokenId:",tokenId)
-      let dt = await cryphire.connect(trader).getLiquidity(tokenId)
+      let dt = await cryphire.connect(trader).getLiquidityPosition(tokenId)
       console.log(dt)
    })
 
@@ -270,5 +270,42 @@ it("balance of account2 in contract after claim profit", async () => {
   let dt = await contract.balanceOf(account2.address)
   console.log("balance of DAI:",dt)
 })
+
+it("getLiquidity after decrease",async()=>{
+  let [trader] = await ethers.getSigners()
+  let idTrackingIndex = await cryphire.idTrackingIndex()
+let trackingIndex = ethers.toNumber(idTrackingIndex)-1
+  let idTrackingIndexToTokenId = await cryphire.idTrackingIndexToTokenId(trackingIndex)
+
+  let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
+  console.log("tokenId:",tokenId)
+  let dt = await cryphire.connect(trader).getLiquidityPosition(tokenId)
+  console.log(dt)
+})
+
+it("clear liquidity",async()=>{
+  let [trader,account2] = await ethers.getSigners()
+  let idTrackingIndex = await cryphire.idTrackingIndex()
+let trackingIndex = ethers.toNumber(idTrackingIndex)-1
+  let idTrackingIndexToTokenId = await cryphire.idTrackingIndexToTokenId(trackingIndex)
+  let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
+let dt = await cryphire.connect(account2).clearLiquidity(tokenId)
+console.log(dt)
+  
+
+})
+
+it("getting liquidity Position",async()=>{
+  let [trader] = await ethers.getSigners()
+  let idTrackingIndex = await cryphire.idTrackingIndex()
+let trackingIndex = ethers.toNumber(idTrackingIndex)-1
+  let idTrackingIndexToTokenId = await cryphire.idTrackingIndexToTokenId(trackingIndex)
+
+  let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
+  console.log("tokenId:",tokenId)
+  let dt = await cryphire.connect(trader).getLiquidityPosition(tokenId)
+  console.log(dt)
+})
+
 })
 

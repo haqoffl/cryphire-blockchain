@@ -12,6 +12,30 @@ import '@uniswap/v3-periphery/contracts/libraries/TransferHelper.sol';
 import '@uniswap/v3-periphery/contracts/base/LiquidityManagement.sol';
 import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
 import "hardhat/console.sol";
+
+interface INFTManagerPosition {
+    // NB: the fields of this custom struct match the order of the primitive types returned by INonFungiblePositionManager.positions()
+    struct NFTPosition {
+            uint96 nonce;
+            address operator;
+            address token0;
+            address token1;
+            uint24 fee;
+            int24 tickLower;
+            int24 tickUpper;
+            uint128 liquidity;
+            uint256 feeGrowthInside0LastX128;
+            uint256 feeGrowthInside1LastX128;
+            uint128 tokensOwed0;
+            uint128 tokensOwed1;
+ 
+    }
+    // Note the function is identical to INonFungiblePositionManager.positions except for the return type
+    // This workaround does not seem to work if the external function accepts too many input parameters and you want to encode the inputs into a custom struct, likely because this results in a different function selector and so you're calling a function that doesn't exist, however, this is not an issue for the return value since that is not considered when computing the function signature hash
+    function positions(uint256 tokenId) external view returns (NFTPosition memory);
+}
+
+
 contract Cryphire is IERC721Receiver {
     event liquidityMinted(address indexed from,uint256 tokenId,address indexed token0,address indexed token1,uint128 liquidity);
     address payable public trader;
@@ -36,6 +60,7 @@ contract Cryphire is IERC721Receiver {
    uint public decimal;
     ISwapRouter public immutable swapRouter;
     INonfungiblePositionManager public immutable nonfungiblePositionManager;
+    INFTManagerPosition public immutable nftPositionManager;
 constructor(uint _durationInDaysForRaising,uint _durationInDaysForPool,uint _trader_share,address _accepting_token,address _swapRouter, address _nonFungiblePositionManager) payable{
         trader = payable(msg.sender);
         pool_deadline = block.timestamp + (_durationInDaysForPool * 1 days);
@@ -45,6 +70,7 @@ constructor(uint _durationInDaysForRaising,uint _durationInDaysForPool,uint _tra
         decimal = IERC20(_accepting_token).decimals();
         swapRouter = ISwapRouter(_swapRouter);
         nonfungiblePositionManager = INonfungiblePositionManager(_nonFungiblePositionManager);
+        nftPositionManager = INFTManagerPosition(_nonFungiblePositionManager);
         }
 
     modifier isstakeDepositedByTrader(){
@@ -238,56 +264,29 @@ function increaseLiquidityCurrentRange(uint256 tokenId,uint256 amountAdd0,uint25
         return (liquidity, amount0, amount1);
 }
 
-function decreaseLiquidityInHalf(uint256 tokenId) external onlyTrader returns (uint256 amount0, uint256 amount1) {
-        require(trader == msg.sender, 'Not the Trader');
+function decreaseLiquidity(uint256 tokenId,uint128 percentage) public onlyTrader returns (uint256 amount0, uint256 amount1) {
         uint128 liquidity = deposits[tokenId].liquidity;
-        uint128 halfLiquidity = (liquidity*75) / 100;
+        uint128 removingLiquidity = (liquidity*percentage)/100;
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: tokenId,
-                liquidity: halfLiquidity,
+                liquidity: removingLiquidity,
                 amount0Min: 0,
                 amount1Min: 0,
                 deadline: block.timestamp
             });
 
-        //before decrease liquidity,contract balance
-        uint256 contractBalance0 = IERC20(deposits[tokenId].token0).balanceOf(address(this));
-        uint256 contractBalance1 = IERC20(deposits[tokenId].token1).balanceOf(address(this));
-        console.log("contractBalance0:",contractBalance0);
-        console.log("contractBalance1:",contractBalance1);
+  
 
 
         (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
-
-        //after decrease liquidity,contract balance
-        contractBalance0 = IERC20(deposits[tokenId].token0).balanceOf(address(this));
-        contractBalance1 = IERC20(deposits[tokenId].token1).balanceOf(address(this));
-        console.log("A-contractBalance0:",contractBalance0);
-        console.log("A-contractBalance1:",contractBalance1);
-        console.log("amount0:",amount0);
-        console.log("amount1:",amount1);
-     // _sendToOwner(tokenId, amount0, amount1);
-
+        console.log(amount0,amount1);
         return (amount0, amount1);
 }
 
-    function getLiquidity(uint _tokenId) external view returns (uint128) {
-        (
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            ,
-            uint128 liquidity,
-            ,
-            ,
-            ,
-
-        ) = nonfungiblePositionManager.positions(_tokenId);
-        return liquidity;
+    function getLiquidityPosition(uint256 _tokenId) public view returns (INFTManagerPosition.NFTPosition memory position) {
+     position = nftPositionManager.positions(_tokenId);
+    return position;
     }
 
 function _sendToOwner(uint256 tokenId,uint256 amount0,uint256 amount1) internal {
@@ -333,6 +332,31 @@ function claimProfit(address token) public {
 uint tokenAmount = tokenToTransfer(token,msg.sender);
 IERC20(token).transfer(msg.sender,tokenAmount);
 }
+
+//this function can call by investors when trader makes delay to end the pool
+function clearLiquidity(uint _id) public{
+    //require(pool_deadline < block.timestamp,"you can't end the pool,still active");
+    INFTManagerPosition.NFTPosition memory position = getLiquidityPosition(_id);
+    require(position.liquidity > 0,"pool already empty");
+       uint128 liquidity = deposits[_id].liquidity;
+       console.log(_id,liquidity);
+        uint128 removingLiquidity = (liquidity*99)/100;
+        INonfungiblePositionManager.DecreaseLiquidityParams memory params =
+            INonfungiblePositionManager.DecreaseLiquidityParams({
+                tokenId: _id,
+                liquidity: removingLiquidity,
+                amount0Min: 0,
+                amount1Min: 0,
+                deadline: block.timestamp
+            });
+
+  
+
+
+        nonfungiblePositionManager.decreaseLiquidity(params);
+    
+}
+
 
 
 }
