@@ -30,11 +30,11 @@ let cryphire
         const block = await ethers.provider.getBlock('latest');
         const baseFeePerGas = block.baseFeePerGas;
         console.log("Base Fee Per Gas:", baseFeePerGas.toString());
-         const maxFeePerGas = ethers.toNumber(baseFeePerGas) * 2; // 2x base fee to ensure the transaction gets mined  
+         //const maxFeePerGas = ethers.toNumber(baseFeePerGas) * 2; // 2x base fee to ensure the transaction gets mined  
          let amount = ethers.parseUnits('1000', 6);      
       for(let acc of [trader,account2,account3,account4,account5]){
-        let dt = await tokenContract.transfer(acc.address,ethers.toNumber(amount),{from:investor,maxFeePerGas:maxFeePerGas})
-        console.log(dt)
+        let dt = await tokenContract.transfer(acc.address,ethers.toNumber(amount),{from:investor})
+        //console.log(dt)
       }
        }catch(e){
         console.log(e)
@@ -52,7 +52,7 @@ let cryphire
         console.log("allowance:",allowance)
         let amount_to_stake = ethers.parseUnits('500', 6); 
         let dt = await cryphire.connect(trader).traderStake(ethers.toNumber(amount_to_stake),4) 
-        console.log(dt)
+        //console.log(dt)
         let traderStake = await cryphire.trader_stake()
         console.log("trader investment: ",ethers.toNumber(traderStake))
     })
@@ -69,7 +69,7 @@ let cryphire
          console.log("allowance:",allowance)
          let amount_to_invest = ethers.parseUnits('500', 6); 
          let dt = await cryphire.connect(impersonatedSigner).depositERC20_inv(ethers.toNumber(amount_to_invest)); 
-         console.log(dt)
+         //console.log(dt)
          let balance = await cryphire.investor_investment(investor)
          console.log("investor investment: ",ethers.toNumber(balance))
  
@@ -154,6 +154,17 @@ let cryphire
      })
 
 
+     it("getLiquidity after minting new position",async()=>{
+      let [trader] = await ethers.getSigners()
+      let idTrackingIndex = await cryphire.idTrackingIndex()
+    let trackingIndex = ethers.toNumber(idTrackingIndex)-1
+      let idTrackingIndexToTokenId = await cryphire.idTrackingIndexToTokenId(trackingIndex)
+
+      let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
+      console.log("tokenId:",tokenId)
+      let dt = await cryphire.connect(trader).getLiquidityPosition(tokenId)
+      console.log(dt)
+   })
      it("balance of USDT & DAI in contract after mint liquidity", async () => {
       let [trader] = await ethers.getSigners()
       let dt = await cryphire.connect(trader).balance_of_tokens(DAI)
@@ -195,7 +206,7 @@ let cryphire
       console.log("balance of USDT:",usdtBal)
    })
 
-     it("getLiquidity",async()=>{
+     it("getLiquidity after increase liquidity",async()=>{
         let [trader] = await ethers.getSigners()
         let idTrackingIndex = await cryphire.idTrackingIndex()
       let trackingIndex = ethers.toNumber(idTrackingIndex)-1
@@ -215,7 +226,7 @@ let cryphire
   
         let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
         console.log("tokenId:",tokenId)
-        let dt = await cryphire.connect(trader).decreaseLiquidity(tokenId,100)
+        let dt = await cryphire.connect(trader).decreaseLiquidity(tokenId,50)
         console.log(dt)
      })
 
@@ -288,7 +299,9 @@ it("clear liquidity",async()=>{
   let idTrackingIndex = await cryphire.idTrackingIndex()
 let trackingIndex = ethers.toNumber(idTrackingIndex)-1
   let idTrackingIndexToTokenId = await cryphire.idTrackingIndexToTokenId(trackingIndex)
+
   let tokenId = ethers.toNumber(idTrackingIndexToTokenId)
+  console.log("tokenId:",tokenId)
 let dt = await cryphire.connect(account2).clearLiquidity(tokenId)
 console.log(dt)
   
@@ -309,3 +322,7 @@ let trackingIndex = ethers.toNumber(idTrackingIndex)-1
 
 })
 
+49990675347579n
+59988810417094n
+29994405208547n
+26994964687693n

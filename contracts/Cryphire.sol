@@ -37,7 +37,9 @@ interface INFTManagerPosition {
 
 
 contract Cryphire is IERC721Receiver {
-    event liquidityMinted(address indexed from,uint256 tokenId,address indexed token0,address indexed token1,uint128 liquidity);
+    event liquidityMinted(uint256 tokenId,address indexed token0,address indexed token1,uint128 liquidity);
+    event liquidityIncreased(uint256 tokenId,uint128 currentLiquidity);
+    event liquidityDecreased(uint256 tokenId,uint128 currentLiquidity);
     address payable public trader;
     mapping(address=>bool) investor;
     uint public trader_stake;
@@ -61,7 +63,7 @@ contract Cryphire is IERC721Receiver {
     ISwapRouter public immutable swapRouter;
     INonfungiblePositionManager public immutable nonfungiblePositionManager;
     INFTManagerPosition public immutable nftPositionManager;
-constructor(uint _durationInDaysForRaising,uint _durationInDaysForPool,uint _trader_share,address _accepting_token,address _swapRouter, address _nonFungiblePositionManager) payable{
+    constructor(uint _durationInDaysForRaising,uint _durationInDaysForPool,uint _trader_share,address _accepting_token,address _swapRouter, address _nonFungiblePositionManager) payable{
         trader = payable(msg.sender);
         pool_deadline = block.timestamp + (_durationInDaysForPool * 1 days);
         raising_deadline = block.timestamp + (_durationInDaysForRaising * 1 days);
@@ -180,14 +182,13 @@ function mintNewPosition(
     address _token1,
     uint24 _poolFee,
     uint amount0ToMint,
-    uint amount1ToMint
-) external  returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) {
+    uint amount1ToMint) external  returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1) {
 
-    //uint256 slippageTolerance = 100; // 1% in basis points (100 basis points = 1%)
-   // uint _amount0min = amount0ToMint - ((amount0ToMint * slippageTolerance) / 10000);
-    //uint _amount1min = amount1ToMint - ((amount1ToMint * slippageTolerance) / 10000);
-    TransferHelper.safeApprove(_token0,address(nonfungiblePositionManager),amount0ToMint);
-    TransferHelper.safeApprove(_token1,address(nonfungiblePositionManager),amount1ToMint);
+        //uint256 slippageTolerance = 100; // 1% in basis points (100 basis points = 1%)
+        // uint _amount0min = amount0ToMint - ((amount0ToMint * slippageTolerance) / 10000);
+        //uint _amount1min = amount1ToMint - ((amount1ToMint * slippageTolerance) / 10000);
+        TransferHelper.safeApprove(_token0,address(nonfungiblePositionManager),amount0ToMint);
+        TransferHelper.safeApprove(_token1,address(nonfungiblePositionManager),amount1ToMint);
         INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
         token0: _token0,
         token1: _token1,
@@ -200,25 +201,25 @@ function mintNewPosition(
         amount1Min:0,
         recipient: address(this),
         deadline: block.timestamp + 30 minutes // Ensure the deadline is reasonable
-    });
-console.log("passed");
-    (tokenId, liquidity, amount0, amount1) = nonfungiblePositionManager.mint(params);
-    console.log("Minted position. Token ID:", tokenId, "Liquidity:", liquidity);
-    console.log("Amount0:", amount0, "Amount1:", amount1);
-    _createDeposit(address(this), tokenId);
-    if (amount0 < amount0ToMint) {
+        });
+        console.log("passed");
+        (tokenId, liquidity, amount0, amount1) = nonfungiblePositionManager.mint(params);
+        console.log("Minted position. Token ID:", tokenId, "Liquidity:", liquidity);
+        console.log("Amount0:", amount0, "Amount1:", amount1);
+        _createDeposit(address(this), tokenId);
+        if (amount0 < amount0ToMint) {
         TransferHelper.safeApprove(_token0, address(nonfungiblePositionManager), 0);
         uint256 refund0 = amount0ToMint - amount0;
         TransferHelper.safeTransfer(_token0,address(this), refund0);
-    }
+        }
 
-    if (amount1 < amount1ToMint) {
+        if (amount1 < amount1ToMint) {
         TransferHelper.safeApprove(_token1, address(nonfungiblePositionManager), 0);
         uint256 refund1 = amount1ToMint - amount1;
         TransferHelper.safeTransfer(_token1,address(this), refund1);
-    }
-
-    return (tokenId, liquidity, amount0, amount1);
+        }
+        emit liquidityMinted(tokenId,_token0,_token1,liquidity);
+        return (tokenId, liquidity, amount0, amount1);
 }
 
 
@@ -261,6 +262,9 @@ function increaseLiquidityCurrentRange(uint256 tokenId,uint256 amountAdd0,uint25
         console.log("liquidity:",liquidity);
         console.log("amount0:",amount0);
         console.log("amount1:",amount1);
+        deposits[tokenId].liquidity += liquidity;
+
+        emit liquidityIncreased(tokenId, deposits[tokenId].liquidity);
         return (liquidity, amount0, amount1);
 }
 
@@ -280,7 +284,9 @@ function decreaseLiquidity(uint256 tokenId,uint128 percentage) public onlyTrader
 
 
         (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
-        console.log(amount0,amount1);
+        deposits[tokenId].liquidity = liquidity - removingLiquidity;
+        console.log(amount0,amount1,deposits[tokenId].liquidity);
+        emit liquidityDecreased(tokenId, deposits[tokenId].liquidity);
         return (amount0, amount1);
 }
 
@@ -293,13 +299,8 @@ function _sendToOwner(uint256 tokenId,uint256 amount0,uint256 amount1) internal 
         address owner = deposits[tokenId].owner;
         address token0 = deposits[tokenId].token0;
         address token1 = deposits[tokenId].token1;
-        console.log("owner: ",owner);
-        console.log("token0: ",token0);
-        console.log("token1: ",token1);
-        console.log("contract:",address(this));
-        TransferHelper.safeTransfer(token0, owner, amount0);
+          TransferHelper.safeTransfer(token0, owner, amount0);
         TransferHelper.safeTransfer(token1, owner, amount1);
-        console.log("sent to owner"); 
 }
 
 function retrieveNFT(uint256 tokenId) onlyTrader external {
@@ -326,21 +327,22 @@ function tokenToTransfer(address token,address user) public view returns (uint) 
     uint tokenAmount = percentageShare(user) * tokenBalanceInContract / (10 ** tokenDecimal);
     return tokenAmount;
 }
+
 function claimProfit(address token) public {
-//require(pool_deadline > block.timestamp,"you can't claim now");
-//require(raising_deadline > block.timestamp,"you can't claim now");
-uint tokenAmount = tokenToTransfer(token,msg.sender);
-IERC20(token).transfer(msg.sender,tokenAmount);
+    //require(pool_deadline > block.timestamp,"you can't claim now");
+    //require(raising_deadline > block.timestamp,"you can't claim now");
+    uint tokenAmount = tokenToTransfer(token,msg.sender);
+    IERC20(token).transfer(msg.sender,tokenAmount);
 }
 
 //this function can call by investors when trader makes delay to end the pool
-function clearLiquidity(uint _id) public{
+function clearLiquidity(uint _id) public returns (uint256 amount0, uint256 amount1) {
     //require(pool_deadline < block.timestamp,"you can't end the pool,still active");
     INFTManagerPosition.NFTPosition memory position = getLiquidityPosition(_id);
     require(position.liquidity > 0,"pool already empty");
        uint128 liquidity = deposits[_id].liquidity;
        console.log(_id,liquidity);
-        uint128 removingLiquidity = (liquidity*99)/100;
+        uint128 removingLiquidity = (liquidity*100)/100;
         INonfungiblePositionManager.DecreaseLiquidityParams memory params =
             INonfungiblePositionManager.DecreaseLiquidityParams({
                 tokenId: _id,
@@ -350,14 +352,12 @@ function clearLiquidity(uint _id) public{
                 deadline: block.timestamp
             });
 
-  
-
-
-        nonfungiblePositionManager.decreaseLiquidity(params);
+       (amount0, amount1) = nonfungiblePositionManager.decreaseLiquidity(params);
+       deposits[_id].liquidity = liquidity - removingLiquidity;
+       emit liquidityDecreased(_id, deposits[_id].liquidity);
+       return(amount0,amount1);
     
 }
-
-
 
 }
 
