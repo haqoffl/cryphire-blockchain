@@ -169,7 +169,7 @@ function _createDeposit(address owner, uint256 tokenId) internal {
         idTrackingIndexToTokenId[idTrackingIndex] = tokenId;
         idTrackingIndex++;
         console.log("deposit");
-        emit liquidityMinted(address(this), tokenId,token0,token1,liquidity);
+        emit liquidityMinted(tokenId,token0,token1,liquidity);
 }
 
 function isPoolExist(address factory, address tokenA, address tokenB, uint24 fee) external view returns (address) {

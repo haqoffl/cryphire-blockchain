@@ -2,6 +2,8 @@ var {expect} = require('chai')
 var {ethers} = require('hardhat')
 const helpers= require('@nomicfoundation/hardhat-toolbox/network-helpers')
 const tokenABI = require('../tokenABI.json')
+const { Token, CurrencyAmount, TradeType, Percent } = require("@uniswap/sdk-core");
+const { Pool, Route, Trade } = require("@uniswap/v3-sdk");
 const {before} = require('mocha')
 let investor = "0xF977814e90dA44bFA03b6295A0616a897441aceC"
 const tokenAddress = "0xdAC17F958D2ee523a2206206994597C13D831ec7" //USDT
@@ -320,9 +322,37 @@ let trackingIndex = ethers.toNumber(idTrackingIndex)-1
   console.log(dt)
 })
 
+it("getting quote",async()=>{
+  let [trader] = await ethers.getSigners()
+  const QUOTER_ADDRESS = "0xb27308f9F90D607463bb33eA1BeBb41C27CE5AB6";
+  const QUOTER_ABI = [
+    "function quoteExactInputSingle(address tokenIn, address tokenOut, uint24 fee, uint256 amountIn, uint160 sqrtPriceLimitX96)view external returns (uint256 amountOut)"
+  ];
+  const USDC = new Token(1, "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", 6, "USDC", "USD Coin");
+const _UNI = new Token(1, "0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984", 18, "UNI", "Uniswap");
+const amountIn = ethers.parseUnits("100", USDC.decimals); // 100 USDC
+
+  let quoterContract = new ethers.Contract(QUOTER_ADDRESS, QUOTER_ABI, trader);
+const amount1 = 100 ;
+const amount2 = 7.53866 ; 
+const price = amount2 / amount1; // UNI  per USDC
+console.log("Price (UNI per USDC):", price);
+const sqrtPrice = Math.sqrt(price) * Math.pow(2, 96);
+const sqrtPriceX96 = BigInt(Math.round(sqrtPrice));
+console.log("sqrt: ",sqrtPriceX96)
+  const quotedAmountOut = await quoterContract.quoteExactInputSingle(
+    USDC.address,
+    _UNI.address,
+    3000,//pool fee
+    amountIn, //amount in
+   sqrtPriceX96 //sqrt
+  );
+console.log("quote:",quotedAmountOut)
+console.log("Quote (amountOut):", ethers.formatUnits(quotedAmountOut, UNI.decimals));
+
+
+
+
+})
 })
 
-49990675347579n
-59988810417094n
-29994405208547n
-26994964687693n
